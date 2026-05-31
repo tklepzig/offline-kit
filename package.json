@@ -4,6 +4,10 @@
   "type": "module",
   "description": "Offline-PWA toolkit for the app family: a hardened service worker, an offline-readiness signal, and esbuild build orchestration with a content-hashed precache manifest.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tklepzig/offline-kit.git"
+  },
   "bin": {
     "offline-kit": "cli.js"
   },
