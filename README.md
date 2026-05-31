@@ -26,7 +26,7 @@ createOfflineServiceWorker({
 
 Type-check it with the shipped base config:
 
-```json
+```jsonc
 // tsconfig.sw.json
 { "extends": "@tklepzig/offline-kit/tsconfig-sw.json", "files": ["sw.ts"] }
 ```
