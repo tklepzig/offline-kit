@@ -5,7 +5,7 @@
   "description": "Offline-PWA toolkit for the app family: a hardened service worker, an offline-readiness signal, and esbuild build orchestration with a content-hashed precache manifest.",
   "license": "MIT",
   "bin": {
-    "offline-kit": "./cli.js"
+    "offline-kit": "cli.js"
   },
   "exports": {
     ".": {
