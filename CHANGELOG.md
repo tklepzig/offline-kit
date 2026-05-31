@@ -1,5 +1,11 @@
 # @tklepzig/offline-kit
 
+## 0.1.1
+
+### Patch Changes
+
+- ed1cbc3: Dummy Patch to test release workflow
+
 ## 0.1.0
 
 ### Minor Changes
