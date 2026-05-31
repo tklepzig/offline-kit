@@ -1,0 +1,52 @@
+{
+  "name": "@tklepzig/offline-kit",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Offline-PWA toolkit for the app family: a hardened service worker, an offline-readiness signal, and esbuild build orchestration with a content-hashed precache manifest.",
+  "license": "MIT",
+  "bin": {
+    "offline-kit": "./cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/offline-readiness.d.ts",
+      "default": "./dist/offline-readiness.js"
+    },
+    "./sw": {
+      "types": "./dist/service-worker.d.ts",
+      "default": "./dist/service-worker.js"
+    },
+    "./shared": {
+      "types": "./dist/shared.d.ts",
+      "default": "./dist/shared.js"
+    },
+    "./global": {
+      "types": "./dist/global.d.ts"
+    },
+    "./build": "./build-pwa.js",
+    "./tsconfig-sw.json": "./tsconfig-sw.json"
+  },
+  "files": [
+    "dist",
+    "build-pwa.js",
+    "cli.js",
+    "tsconfig-sw.json"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.dom.json --noEmit && tsc -p tsconfig.webworker.json --noEmit",
+    "test": "vitest run",
+    "changeset": "changeset",
+    "version": "npm run build && changeset version",
+    "remove-snapshot": "f(){ if [ -z \"$1\" ]; then echo \"Error: No tag name specified, exiting.\"; exit 1; fi; npm dist-tag rm @tklepzig/offline-kit $1; }; f"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.0"
+  }
+}

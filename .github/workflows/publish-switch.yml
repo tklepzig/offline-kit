@@ -1,0 +1,28 @@
+name: Publish switch
+
+on:
+  issue_comment:
+    types: ["created"]
+  push:
+    branches:
+      - master
+
+permissions:
+  id-token: write
+
+jobs:
+  release-snapshot:
+    if: github.event_name == 'issue_comment'
+    uses: ./.github/workflows/release-snapshot.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      pull-requests: write
+
+  release:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: write

@@ -1,0 +1,150 @@
+name: Release Snapshot
+
+on:
+  workflow_call:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Release
+    if:
+      ${{ github.event.issue.pull_request && github.event.comment.body ==
+      '/snapshot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Add initial reaction
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ github.event.comment.id }}
+          reactions: eyes
+
+      - name: Create initial comment
+        id: initial-comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            **Snapshot release** triggered by ${{ github.event.comment.html_url }}
+
+            Running ([view action log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+
+      - name: Enforce write permission
+        uses: prince-chrismc/check-actor-permissions-action@v3
+        with:
+          permission: write
+
+      - name: Get branch ref from PR comment
+        uses: xt0rted/pull-request-comment-branch@v2
+        id: comment-branch
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+          fetch-depth: 0
+
+      - name: Use Node.js from .tool-versions
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Changeset status
+        id: changeset-status
+        run: npx changeset status
+
+      - name: Version packages
+        run:
+          npx changeset version --snapshot ${{
+          steps.comment-branch.outputs.head_ref }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Publish packages
+        id: publish
+        run: |
+          set +e
+          CHANGESET_OUTPUT=$(npx changeset publish --no-git-tag --tag ${{ steps.comment-branch.outputs.head_ref }} 2>&1)
+          CHANGESET_EXITCODE="$?"
+          set -e
+          echo "console<<__EOF__" >> $GITHUB_OUTPUT
+          echo "$CHANGESET_OUTPUT" &>> $GITHUB_OUTPUT
+          echo "__EOF__" >> $GITHUB_OUTPUT
+          echo "$CHANGESET_OUTPUT"
+          exit "$CHANGESET_EXITCODE"
+
+      - name: Add success reaction
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ github.event.comment.id }}
+          reactions: rocket
+
+      - name: Add success comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.initial-comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            **Snapshot release** triggered by ${{ github.event.comment.html_url }}
+
+            Success ([view action log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+
+            <details>
+            <summary>Output</summary>
+
+            ```console
+            ${{ steps.publish.outputs.console }}
+            ```
+            </details>
+
+      - name: Add failure reaction
+        if: ${{ failure() || cancelled() }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ github.event.comment.id }}
+          reactions: confused
+
+      - name: Add missing changeset comment
+        if: ${{ failure() && steps.changeset-status.outcome == 'failure' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.initial-comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            **Snapshot release** triggered by ${{ github.event.comment.html_url }}
+
+            Failure ([view action log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+
+            #### Missing changeset(s)
+
+            No changesets were found. Run `npm run changeset` to resolve this error.
+
+            [Click here to learn what changesets are, and how to add one](https://github.com/changesets/changesets/blob/main/docs/adding-a-changeset.md).
+
+      - name: Add generic failure comment
+        if: ${{ failure() && steps.changeset-status.outcome != 'failure' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.initial-comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            **Snapshot release** triggered by ${{ github.event.comment.html_url }}
+
+            Failure ([view action log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+
+      - name: Add canceled comment
+        if: cancelled()
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.initial-comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            **Snapshot release** triggered by ${{ github.event.comment.html_url }}
+
+            Canceled ([view action log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))

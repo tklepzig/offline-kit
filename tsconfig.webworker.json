@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig-sw.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "files": ["src/service-worker.ts"]
+}
