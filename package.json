@@ -28,11 +28,13 @@
       "types": "./dist/global.d.ts"
     },
     "./build": "./build-pwa.js",
+    "./verify": "./verify.js",
     "./tsconfig-sw.json": "./tsconfig-sw.json"
   },
   "files": [
     "dist",
     "build-pwa.js",
+    "verify.js",
     "cli.js",
     "tsconfig-sw.json"
   ],
