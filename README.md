@@ -70,15 +70,37 @@ Defaults: page `ui.ts → ui.js` (ESM), SW `sw.ts → sw.js` (IIFE), `target:
 "es2020"`, shell `"./"` from `index.html`. `offline-kit build --watch` runs an
 esbuild watch for the dev loop.
 
+## Verify — static offline-completeness check
+
+`offline-kit verify` (same config) checks the *built* output and exits non-zero
+when the offline guarantee is broken:
+
+- `sw.js` is missing, stale (built before the latest asset change) or lacks a
+  precache entry — rebuild.
+- The shell HTML, any precached CSS, or the web app manifest references a file
+  that doesn't exist.
+- A referenced file exists but isn't covered by the precache globs.
+
+```jsonc
+// package.json
+"scripts": { "verify:offline": "offline-kit verify" }
+```
+
+URLs constructed in JS at runtime are out of scope — pair this with a runtime
+smoke test (boot the app in a browser, wait for offline-ready, kill the server,
+reload, assert nothing fails).
+
 ### Programmatic API
 
-The CLI is a thin wrapper over `buildPwa`, which stays exported for apps that
-need extra build steps or custom control:
+The CLI is a thin wrapper over `buildPwa` / `verifyPwa`, which stay exported
+for apps that need extra build steps or custom control:
 
 ```ts
 import { buildPwa } from "@tklepzig/offline-kit/build";
+import { verifyPwa } from "@tklepzig/offline-kit/verify";
 
 await buildPwa({ precache: [...], watch: false });
+const { errors } = verifyPwa({ precache: [...] });
 ```
 
 ## Releases
