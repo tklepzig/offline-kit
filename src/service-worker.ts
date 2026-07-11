@@ -45,14 +45,35 @@ export function createOfflineServiceWorker(config: ServiceWorkerConfig): void {
   // `cache: "reload"` bypasses the HTTP cache so a fresh deploy can't precache a
   // stale copy of a non-content-hashed file (e.g. ui.js) that a CDN/browser
   // cache would otherwise serve — which would defeat the content-hashed cache.
-  const precache = (): Promise<unknown> =>
+  const cacheUrls = (targetUrls: string[]): Promise<unknown> =>
     caches
       .open(cacheName)
       .then((cache) =>
         Promise.allSettled(
-          urls.map((url) => cache.add(new Request(url, { cache: "reload" }))),
+          targetUrls.map((url) =>
+            cache.add(new Request(url, { cache: "reload" })),
+          ),
         ),
       );
+
+  const precache = (): Promise<unknown> => cacheUrls(urls);
+
+  // A failed/partial install-time precache is otherwise permanent: `install`
+  // only re-fires when sw.js changes, so a cache left empty by a transient
+  // failure (offline first launch, mid-deploy 404) never self-heals. When a
+  // readiness query finds gaps, re-attempt just the missing entries so a plain
+  // page reload repairs the cache. One attempt at a time — overlapping queries
+  // share the in-flight run rather than stampeding the network.
+  let repairInFlight: Promise<unknown> | null = null;
+  const repairMissing = (missing: string[]): Promise<unknown> => {
+    if (missing.length === 0) return Promise.resolve();
+    if (!repairInFlight) {
+      repairInFlight = cacheUrls(missing).finally(() => {
+        repairInFlight = null;
+      });
+    }
+    return repairInFlight;
+  };
 
   self.addEventListener("install", (event) => {
     event.waitUntil(precache());
@@ -126,7 +147,19 @@ export function createOfflineServiceWorker(config: ServiceWorkerConfig): void {
     const port = event.ports[0];
     if (!port) return;
     event.waitUntil(
-      checkOfflineReady().then((result) => port.postMessage(result)),
+      checkOfflineReady().then((result) => {
+        if (result.ready) {
+          port.postMessage(result);
+          return;
+        }
+        // Gap found: repair it, then report the post-repair truth so the reload
+        // that triggered this query can already come back "ready". If repair
+        // outlasts the page's query timeout, the page keeps its current state
+        // and the next reload sees the now-full cache — either way it converges.
+        return repairMissing(result.missing)
+          .then(checkOfflineReady)
+          .then((repaired) => port.postMessage(repaired));
+      }),
     );
   });
 }
