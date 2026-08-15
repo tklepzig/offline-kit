@@ -14,7 +14,7 @@
 // test (boot the app, kill the server, reload) is for.
 
 import { existsSync, readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { isAbsolute, join, posix, relative, resolve } from "node:path";
 
 import { generatePrecacheManifest } from "./build-pwa.js";
 
@@ -62,10 +62,14 @@ export function extractWebmanifestRefs(json) {
   }
 }
 
-/** Resolve a reference found in `fromFile` (root-relative) to a "./x" url. */
+/** Resolve a reference found in `fromFile` (root-relative) to a "./x" url.
+ *  Both sides are separator-normalized: refs from `cleanRef` are already
+ *  forward-slashed, but a `workers` outfile comes straight from the config and
+ *  on Windows may carry backslashes, which would never match a manifest url. */
 function toManifestUrl(ref, fromFile) {
   const base = posix.dirname(fromFile.split("\\").join("/"));
-  return `./${posix.normalize(posix.join(base === "." ? "" : base, ref))}`;
+  const normalizedRef = ref.split("\\").join("/");
+  return `./${posix.normalize(posix.join(base === "." ? "" : base, normalizedRef))}`;
 }
 
 /**
@@ -74,8 +78,17 @@ function toManifestUrl(ref, fromFile) {
  *
  * @returns {{ errors: string[], manifest: { url: string, revision: string }[], checkedRefs: number }}
  */
+/** An esbuild `outfile` as a path relative to `globDirectory`. buildPwa hands
+ *  outfile to esbuild, which resolves it against cwd, while everything here is
+ *  relative to globDirectory. They coincide in the CLI (both "."), but a
+ *  programmatic caller may pass an absolute path — and verifyPwa documents that
+ *  it takes the same options object, so rebase rather than reject. */
+function outfileRelativeTo(globDirectory, outfile) {
+  return isAbsolute(outfile) ? relative(resolve(globDirectory), outfile) : outfile;
+}
+
 export function verifyPwa(options) {
-  const { precache, globDirectory = ".", sw = {} } = options;
+  const { precache, globDirectory = ".", sw = {}, workers = [] } = options;
 
   const manifestOptions = Array.isArray(precache)
     ? { globDirectory, globPatterns: precache }
@@ -86,7 +99,7 @@ export function verifyPwa(options) {
   const errors = [];
 
   // --- 1. sw.js exists and embeds the freshly recomputed manifest -----------
-  const swFile = sw.outfile ?? "sw.js";
+  const swFile = outfileRelativeTo(globDirectory, sw.outfile ?? "sw.js");
   const swPath = join(globDirectory, swFile);
   if (!existsSync(swPath)) {
     errors.push(`${swFile} not found — run the build first`);
@@ -117,6 +130,26 @@ export function verifyPwa(options) {
     for (const ref of extractHtmlRefs(readFileSync(shellPath, "utf8"))) {
       referenced.push({ url: toManifestUrl(ref, shellFile), from: shellFile });
     }
+  }
+
+  // A worker is loaded from JS (`new Worker("ai-worker.js")`), and refs are only
+  // extracted from HTML/CSS/webmanifest — so nothing above can see it. Without
+  // this, forgetting to precache a worker ships an app that works online and
+  // breaks offline, with no error anywhere. The build already knows the
+  // outfiles, so treat each as referenced.
+  if (!Array.isArray(workers)) {
+    errors.push("`workers` must be an array of { entry, outfile }");
+  } else {
+    workers.forEach((worker, index) => {
+      // buildPwa throws on this; staying quiet here would report OK for a
+      // config that cannot build — the opposite of the point of this check.
+      if (!worker?.outfile) {
+        errors.push(`workers[${index}] has no \`outfile\``);
+        return;
+      }
+      const outfile = outfileRelativeTo(globDirectory, worker.outfile);
+      referenced.push({ url: toManifestUrl(outfile, "."), from: "workers config" });
+    });
   }
 
   for (const entry of manifest) {
