@@ -70,6 +70,30 @@ Defaults: page `ui.ts → ui.js` (ESM), SW `sw.ts → sw.js` (IIFE), `target:
 "es2020"`, shell `"./"` from `index.html`. `offline-kit build --watch` runs an
 esbuild watch for the dev loop.
 
+### Web Workers
+
+A worker ships as its own file, so it needs its own bundle *and* a precache
+entry. Declare it under `workers` and list the outfile in `precache`:
+
+```js
+// offline-kit.config.js
+export default {
+  workers: [{ entry: "ai-worker.ts", outfile: "ai-worker.js" }],
+  precache: ["ui.js", "ai-worker.js", "style.min.css", "assets/**/*"],
+};
+```
+
+Workers are bundled **before** the precache manifest is generated, so the
+outfile is hashed like any other asset. Format defaults to `"iife"` — a classic
+worker (`new Worker("ai-worker.js")`) needs no module support in the browser,
+matching how the service worker is built. Pass `format: "esm"` if you want a
+module worker instead.
+
+Declaring the worker here also lets `offline-kit verify` see it. That matters:
+a worker is only ever named inside JS, which the ref extractors don't read, so
+an unlisted one is invisible — it would work online and break offline with no
+error anywhere.
+
 ## Verify — static offline-completeness check
 
 `offline-kit verify` (same config) checks the *built* output and exits non-zero
@@ -80,6 +104,8 @@ when the offline guarantee is broken:
 - The shell HTML, any precached CSS, or the web app manifest references a file
   that doesn't exist.
 - A referenced file exists but isn't covered by the precache globs.
+- A declared `workers` outfile is missing from the build or from the precache
+  globs (see [Web Workers](#web-workers)).
 
 ```jsonc
 // package.json

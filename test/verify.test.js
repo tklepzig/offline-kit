@@ -150,4 +150,91 @@ describe("verifyPwa", () => {
     const { errors } = verifyPwa({ precache: GLOBS, globDirectory: root });
     expect(errors).toEqual([]);
   });
+
+  // A worker is only ever named inside JS, which no extractor reads — so without
+  // the `workers` config it is invisible and an uncached one ships silently.
+  it("flags a worker that was built but not precached", () => {
+    const root = fixture();
+    writeFileSync(join(root, "ai-worker.js"), "onmessage = () => {}");
+    const { errors } = verifyPwa({
+      precache: GLOBS, // deliberately omits ai-worker.js
+      globDirectory: root,
+      workers: [{ entry: "ai-worker.ts", outfile: "ai-worker.js" }],
+    });
+    expect(errors).toEqual([
+      expect.stringContaining("./ai-worker.js, which is not precached"),
+    ]);
+  });
+
+  it("flags a declared worker whose bundle is missing entirely", () => {
+    const root = fixture();
+    const { errors } = verifyPwa({
+      precache: GLOBS,
+      globDirectory: root,
+      workers: [{ entry: "ai-worker.ts", outfile: "ai-worker.js" }],
+    });
+    expect(errors).toEqual([
+      expect.stringContaining("./ai-worker.js, which does not exist"),
+    ]);
+  });
+
+  it("flags a malformed worker entry instead of silently passing", () => {
+    const root = fixture();
+    const { errors } = verifyPwa({
+      precache: GLOBS,
+      globDirectory: root,
+      // `out` is a typo for `outfile` — buildPwa throws on this, so verify
+      // reporting OK (having checked nothing) would be actively misleading.
+      workers: [{ entry: "ai-worker.ts", out: "ai-worker.js" }],
+    });
+    expect(errors).toEqual([expect.stringContaining("workers[0] has no `outfile`")]);
+  });
+
+  it("flags a non-array workers config", () => {
+    const root = fixture();
+    const { errors } = verifyPwa({
+      precache: GLOBS,
+      globDirectory: root,
+      workers: "ai-worker.js",
+    });
+    expect(errors).toEqual([expect.stringContaining("`workers` must be an array")]);
+  });
+
+  it("resolves an absolute worker outfile against globDirectory", () => {
+    const root = fixture();
+    writeFileSync(join(root, "ai-worker.js"), "onmessage = () => {}");
+    const globs = [...GLOBS, "ai-worker.js"];
+    const manifest = generatePrecacheManifest({
+      globDirectory: root,
+      globPatterns: globs,
+    });
+    writeFileSync(join(root, "sw.js"), `precache(${JSON.stringify(manifest)})`);
+
+    const { errors } = verifyPwa({
+      precache: globs,
+      globDirectory: root,
+      // The shape buildPwa is happy with; before rebasing this produced
+      // ".//tmp/…/ai-worker.js" and a bogus "does not exist".
+      workers: [{ entry: join(root, "ai-worker.ts"), outfile: join(root, "ai-worker.js") }],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("passes when the worker is precached", () => {
+    const root = fixture();
+    writeFileSync(join(root, "ai-worker.js"), "onmessage = () => {}");
+    const globs = [...GLOBS, "ai-worker.js"];
+    const manifest = generatePrecacheManifest({
+      globDirectory: root,
+      globPatterns: globs,
+    });
+    writeFileSync(join(root, "sw.js"), `precache(${JSON.stringify(manifest)})`);
+
+    const { errors } = verifyPwa({
+      precache: globs,
+      globDirectory: root,
+      workers: [{ entry: "ai-worker.ts", outfile: "ai-worker.js" }],
+    });
+    expect(errors).toEqual([]);
+  });
 });
